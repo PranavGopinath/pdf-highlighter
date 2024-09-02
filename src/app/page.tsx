@@ -1,113 +1,321 @@
-import Image from "next/image";
+'use client'
 
-export default function Home() {
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  AreaHighlight,
+  Highlight,
+  PdfHighlighter,
+  PdfLoader,
+  Popup,
+  Tip,
+} from "react-pdf-highlighter";
+import SearchBox from '../components/SearchBox';
+import PDFUpload from '../components/PDFUpload';
+import { Sidebar } from "../components/Sidebar";
+import { Spinner } from "../components/Spinner";
+import { pdfjs } from 'react-pdf';
+
+import "../style/App.css";
+import { usePdfTextSearch } from "../components/usePdfTextSearch";
+
+pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+
+import type {
+  Content,
+  IHighlight,
+  NewHighlight,
+  ScaledPosition,
+} from "react-pdf-highlighter";
+
+// Define the HighlightRecord type before usage
+type HighlightRecord = {
+  [key: string]: Array<IHighlight>;
+};
+
+const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
+const SECONDARY_PDF_URL = "https://www.homeworkforyou.com/static_media/uploadedfiles/TECH%20105%20complete%20book-7.pdf";
+
+const searchParams = new URLSearchParams(document.location.search);
+const initialUrl = searchParams.get("url") || PRIMARY_PDF_URL;
+
+const getNextId = () => String(Math.random()).slice(2);
+
+const parseIdFromHash = () => document.location.hash.slice("#highlight-".length);
+
+const resetHash = () => {
+  document.location.hash = "";
+};
+
+const HighlightPopup = ({
+  comment,
+}: {
+  comment: { text: string; emoji: string };
+}) =>
+  comment.text ? (
+    <div className="Highlight__popup">
+      {comment.emoji} {comment.text}
+    </div>
+  ) : null;
+
+let scrollViewerTo: (highlight: IHighlight) => void = () => {};
+
+const Page = () => {
+  const [url, setUrl] = useState<string>(initialUrl);
+  const [highlights, setHighlights] = useState<Array<IHighlight>>([]);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [searchTerms, setSearchTerms] = useState<string>("");
+
+  const searchResults = usePdfTextSearch({ file: url, searchString: searchTerms });
+
+  console.log(searchResults)
+
+  useEffect(() => {
+    const handleHashChange = () => {
+      scrollToHighlightFromHash();
+    };
+
+    window.addEventListener("hashchange", handleHashChange);
+
+    return () => {
+      window.removeEventListener("hashchange", handleHashChange);
+    };
+  }, [highlights]);
+
+  const handleSetFile = (file: File | null) => {
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setFileUrl(url);
+      setUrl(url); // Set the URL for the PDF viewer
+    } else {
+      setFileUrl(null);
+      setUrl(initialUrl); // Reset to initial URL if no file is selected
+    }
+  };
+
+  const resetHighlights = () => {
+    setHighlights([]);
+  };
+
+  const toggleDocument = () => {
+    const newUrl = url === PRIMARY_PDF_URL ? SECONDARY_PDF_URL : PRIMARY_PDF_URL;
+    setUrl(newUrl);
+    setHighlights([]);
+  };
+
+  const scrollToHighlightFromHash = () => {
+    const highlight = getHighlightById(parseIdFromHash());
+    if (highlight) {
+      scrollViewerTo(highlight);
+    }
+  };
+
+  const getHighlightById = (id: string) => {
+    return highlights.find((highlight) => highlight.id === id);
+  };
+
+  const addHighlight = (highlight: NewHighlight) => {
+    console.log("Saving highlight", highlight);
+    setHighlights([{ ...highlight, id: getNextId() }, ...highlights]);
+  };
+
+  const updateHighlight = (
+    highlightId: string,
+    position: Partial<ScaledPosition>,
+    content: Partial<Content>
+  ) => {
+    console.log("Updating highlight", highlightId, position, content);
+
+    setHighlights(
+      highlights.map((h) =>
+        h.id === highlightId
+          ? {
+              ...h,
+              position: { ...h.position, ...position },
+              content: { ...h.content, ...content },
+            }
+          : h
+      )
+    );
+  };
+
+  const handleSearch = (terms: string) => {
+    setSearchTerms(terms);
+  };
+
+  const findAndHighlightTerms = (text: string, pageIndex: number) => {
+    const terms = searchTerms.split(" ").filter(Boolean);
+    const highlights: IHighlight[] = [];
+  
+    terms.forEach((term) => {
+      const regex = new RegExp(`\\b${term}\\b`, "gi");
+      let match;
+      while ((match = regex.exec(text))) {
+        const boundingRect = {
+          x1: 0,
+          y1: 0,
+          x2: 100,
+          y2: 20,
+          width: 100,  // x2 - x1
+          height: 20   // y2 - y1
+        };
+  
+        highlights.push({
+          id: getNextId(),
+          position: {
+            boundingRect,  // Include boundingRect
+            rects: [boundingRect],  // Provide an array of bounding rectangles
+            pageNumber: pageIndex   // Page number for the highlight
+          },
+          content: { text: match[0] },
+          comment: { text: term, emoji: "🔍" },
+        });
+      }
+    });
+  
+    return highlights;
+  };
+  
+
+  const highlightTermsInPdf = () => {
+    const newHighlights: IHighlight[] = [];
+  
+    searchResults.forEach((searchResult) => {
+      const { position, pageNumber, matchedText } = searchResult;
+  
+      const boundingRect = {
+        x1: position.x1,
+        y1: position.y1,
+        x2: position.x2,
+        y2: position.y2,
+        width: position.x2 - position.x1,
+        height: position.y2 - position.y1,
+      };
+  
+      newHighlights.push({
+        id: getNextId(),
+        position: {
+          boundingRect,  // Include boundingRect
+          rects: [boundingRect],  // Provide an array of bounding rectangles
+          pageNumber: pageNumber,   // Page number for the highlight
+        },
+        content: { text: matchedText },
+        comment: { text: searchTerms, emoji: "🔍" },  // Adjust this to match your requirement
+      });
+    });
+  
+    setHighlights(newHighlights);
+    console.log(highlights)
+  };
+  
+  
+  useEffect(() => {
+    if (searchResults.length > 0) {
+      highlightTermsInPdf();
+    }
+  }, [searchResults]);
+
+  let resultText =
+    searchResults.length === 1
+      ? "Results found on 1 page"
+      : `Results found on ${searchResults.length} pages`;
+
+  if (searchResults.length === 0) {
+    resultText = "no results found";
+  }
+
+
   return (
-    <main className="flex min-h-screen flex-col items-center justify-between p-24">
-      <div className="z-10 w-full max-w-5xl items-center justify-between font-mono text-sm lg:flex">
-        <p className="fixed left-0 top-0 flex w-full justify-center border-b border-gray-300 bg-gradient-to-b from-zinc-200 pb-6 pt-8 backdrop-blur-2xl dark:border-neutral-800 dark:bg-zinc-800/30 dark:from-inherit lg:static lg:w-auto  lg:rounded-xl lg:border lg:bg-gray-200 lg:p-4 lg:dark:bg-zinc-800/30">
-          Get started by editing&nbsp;
-          <code className="font-mono font-bold">src/app/page.tsx</code>
-        </p>
-        <div className="fixed bottom-0 left-0 flex h-48 w-full items-end justify-center bg-gradient-to-t from-white via-white dark:from-black dark:via-black lg:static lg:size-auto lg:bg-none">
-          <a
-            className="pointer-events-none flex place-items-center gap-2 p-8 lg:pointer-events-auto lg:p-0"
-            href="https://vercel.com?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            By{" "}
-            <Image
-              src="/vercel.svg"
-              alt="Vercel Logo"
-              className="dark:invert"
-              width={100}
-              height={24}
-              priority
+    <div className="App" style={{ display: "flex", height: "100vh" }}>
+      <Sidebar
+        highlights={highlights}
+        resetHighlights={resetHighlights}
+        toggleDocument={toggleDocument}
+      />
+      <div
+        style={{
+          height: "100vh",
+          width: "75vw",
+          position: "relative",
+        }}
+      >
+        <PDFUpload setFile={handleSetFile} />
+        <SearchBox onSearch={handleSearch}/>
+        <p>{resultText}</p>
+        <PdfLoader url={url} beforeLoad={<Spinner />}>
+          {(pdfDocument) => (
+            <PdfHighlighter
+              pdfDocument={pdfDocument}
+              enableAreaSelection={(event) => event.altKey} // Disable area selection
+              onScrollChange={resetHash}
+              scrollRef={(scrollTo) => {
+                scrollViewerTo = scrollTo;
+                scrollToHighlightFromHash();
+              }}
+              onSelectionFinished={(
+                position,
+                content,
+                hideTipAndSelection,
+                transformSelection
+              ) => (
+                <Tip
+                  onOpen={transformSelection}
+                  onConfirm={(comment) => {
+                    addHighlight({ content, position, comment });
+                    hideTipAndSelection();
+                  }}
+                />
+              )}
+              highlightTransform={(
+                highlight,
+                index,
+                setTip,
+                hideTip,
+                viewportToScaled,
+                screenshot,
+                isScrolledTo
+              ) => {
+                const isTextHighlight = !highlight.content?.image;
+
+                const component = isTextHighlight ? (
+                  <Highlight
+                    isScrolledTo={isScrolledTo}
+                    position={highlight.position}
+                    comment={highlight.comment}
+                  />
+                ) : (
+                  <AreaHighlight
+                    isScrolledTo={isScrolledTo}
+                    highlight={highlight}
+                    onChange={(boundingRect) => {
+                      updateHighlight(
+                        highlight.id,
+                        { boundingRect: viewportToScaled(boundingRect) },
+                        { image: screenshot(boundingRect) }
+                      );
+                    }}
+                  />
+                );
+
+                return (
+                  <Popup
+                    popupContent={<HighlightPopup {...highlight} />}
+                    onMouseOver={(popupContent) =>
+                      setTip(highlight, () => popupContent)
+                    }
+                    onMouseOut={hideTip}
+                    key={index}
+                  >
+                    {component}
+                  </Popup>
+                );
+              }}
+              highlights={highlights}
             />
-          </a>
-        </div>
+          )}
+        </PdfLoader>
       </div>
-
-      <div className="relative z-[-1] flex place-items-center before:absolute before:h-[300px] before:w-full before:-translate-x-1/2 before:rounded-full before:bg-gradient-radial before:from-white before:to-transparent before:blur-2xl before:content-[''] after:absolute after:-z-20 after:h-[180px] after:w-full after:translate-x-1/3 after:bg-gradient-conic after:from-sky-200 after:via-blue-200 after:blur-2xl after:content-[''] before:dark:bg-gradient-to-br before:dark:from-transparent before:dark:to-blue-700 before:dark:opacity-10 after:dark:from-sky-900 after:dark:via-[#0141ff] after:dark:opacity-40 sm:before:w-[480px] sm:after:w-[240px] before:lg:h-[360px]">
-        <Image
-          className="relative dark:drop-shadow-[0_0_0.3rem_#ffffff70] dark:invert"
-          src="/next.svg"
-          alt="Next.js Logo"
-          width={180}
-          height={37}
-          priority
-        />
-      </div>
-
-      <div className="mb-32 grid text-center lg:mb-0 lg:w-full lg:max-w-5xl lg:grid-cols-4 lg:text-left">
-        <a
-          href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Docs{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Find in-depth information about Next.js features and API.
-          </p>
-        </a>
-
-        <a
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Learn{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Learn about Next.js in an interactive course with&nbsp;quizzes!
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Templates{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-sm opacity-50">
-            Explore starter templates for Next.js.
-          </p>
-        </a>
-
-        <a
-          href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template&utm_campaign=create-next-app"
-          className="group rounded-lg border border-transparent px-5 py-4 transition-colors hover:border-gray-300 hover:bg-gray-100 hover:dark:border-neutral-700 hover:dark:bg-neutral-800/30"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <h2 className="mb-3 text-2xl font-semibold">
-            Deploy{" "}
-            <span className="inline-block transition-transform group-hover:translate-x-1 motion-reduce:transform-none">
-              -&gt;
-            </span>
-          </h2>
-          <p className="m-0 max-w-[30ch] text-balance text-sm opacity-50">
-            Instantly deploy your Next.js site to a shareable URL with Vercel.
-          </p>
-        </a>
-      </div>
-    </main>
+    </div>
   );
-}
+};
+
+export default Page;
