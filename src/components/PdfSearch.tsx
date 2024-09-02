@@ -9,7 +9,7 @@ const PdfSearch = ({ file }: { file: string }) => {
   useEffect(() => {
     const fetchText = async () => {
       const text = await extractTextFromPdf(file);
-    //   setPdfText(text);
+      setPdfText(text);
     };
     fetchText();
   }, [file]);

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import {
   AreaHighlight,
   Highlight,
@@ -14,7 +14,6 @@ import PDFUpload from '../components/PDFUpload';
 import { Sidebar } from "../components/Sidebar";
 import { Spinner } from "../components/Spinner";
 import { pdfjs } from 'react-pdf';
-
 import "../style/App.css";
 import { usePdfTextSearch } from "../components/usePdfTextSearch";
 
@@ -25,11 +24,16 @@ import type {
   IHighlight,
   NewHighlight,
   ScaledPosition,
+  LTWHP,
 } from "react-pdf-highlighter";
 
-// Define the HighlightRecord type before usage
-type HighlightRecord = {
-  [key: string]: Array<IHighlight>;
+type BoundingRect = {
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
+  width: number;
+  height: number;
 };
 
 const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
@@ -64,10 +68,13 @@ const Page = () => {
   const [highlights, setHighlights] = useState<Array<IHighlight>>([]);
   const [fileUrl, setFileUrl] = useState<string | null>(null);
   const [searchTerms, setSearchTerms] = useState<string>("");
+  const [keywordRects, setKeywordRects] = useState<BoundingRect[]>([]);
+
+  const updateKeywordRects = (newRects: BoundingRect[]) => {
+    setKeywordRects(newRects);
+  };
 
   const searchResults = usePdfTextSearch({ file: url, searchString: searchTerms });
-
-  console.log(searchResults)
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -142,72 +149,51 @@ const Page = () => {
     setSearchTerms(terms);
   };
 
-  const findAndHighlightTerms = (text: string, pageIndex: number) => {
-    const terms = searchTerms.split(" ").filter(Boolean);
-    const highlights: IHighlight[] = [];
-  
-    terms.forEach((term) => {
-      const regex = new RegExp(`\\b${term}\\b`, "gi");
-      let match;
-      while ((match = regex.exec(text))) {
-        const boundingRect = {
-          x1: 0,
-          y1: 0,
-          x2: 100,
-          y2: 20,
-          width: 100,  // x2 - x1
-          height: 20   // y2 - y1
-        };
-  
-        highlights.push({
-          id: getNextId(),
-          position: {
-            boundingRect,  // Include boundingRect
-            rects: [boundingRect],  // Provide an array of bounding rectangles
-            pageNumber: pageIndex   // Page number for the highlight
-          },
-          content: { text: match[0] },
-          comment: { text: term, emoji: "🔍" },
-        });
-      }
-    });
-  
-    return highlights;
+  const convertBoundingRectToLTWHP = (rect: BoundingRect): LTWHP => {
+    return {
+      top: rect.y1,
+      left: rect.x1,
+      width: rect.width,
+      height: rect.height,
+      // Add the page number if it's required for `LTWHP`
+    };
   };
   
 
   const highlightTermsInPdf = () => {
     const newHighlights: IHighlight[] = [];
+    const newRects: BoundingRect[] = []; // Array to track bounding rectangles
   
     searchResults.forEach((searchResult) => {
       const { position, pageNumber, matchedText } = searchResult;
   
-      const boundingRect = {
+      const boundingRect: BoundingRect = {
         x1: position.x1,
         y1: position.y1,
         x2: position.x2,
         y2: position.y2,
         width: position.x2 - position.x1,
-        height: position.y2 - position.y1,
+        height: position.y1 - position.y2,
       };
+  
+      newRects.push(boundingRect); // Add bounding rect to array
   
       newHighlights.push({
         id: getNextId(),
         position: {
-          boundingRect,  // Include boundingRect
-          rects: [boundingRect],  // Provide an array of bounding rectangles
-          pageNumber: pageNumber,   // Page number for the highlight
+          boundingRect,
+          rects: [boundingRect],
+          pageNumber: pageNumber,
         },
         content: { text: matchedText },
-        comment: { text: searchTerms, emoji: "🔍" },  // Adjust this to match your requirement
+        comment: { text: searchTerms, emoji: "🔍" },
       });
     });
   
     setHighlights(newHighlights);
-    console.log(highlights)
+    updateKeywordRects(newRects); // Update state with new bounding rectangles
   };
-  
-  
+
   useEffect(() => {
     if (searchResults.length > 0) {
       highlightTermsInPdf();
@@ -220,10 +206,11 @@ const Page = () => {
       : `Results found on ${searchResults.length} pages`;
 
   if (searchResults.length === 0) {
-    resultText = "no results found";
+    resultText = "No results found";
   }
 
 
+  console.log(searchResults)
   return (
     <div className="App" style={{ display: "flex", height: "100vh" }}>
       <Sidebar
@@ -239,7 +226,7 @@ const Page = () => {
         }}
       >
         <PDFUpload setFile={handleSetFile} />
-        <SearchBox onSearch={handleSearch}/>
+        <SearchBox onSearch={handleSearch} />
         <p>{resultText}</p>
         <PdfLoader url={url} beforeLoad={<Spinner />}>
           {(pdfDocument) => (
@@ -276,12 +263,32 @@ const Page = () => {
               ) => {
                 const isTextHighlight = !highlight.content?.image;
 
+                const keywordHighlightComponents = keywordRects.map((rect, index) => {
+                  const lthwpRect = convertBoundingRectToLTWHP(rect);
+                
+                  return (
+                    <Highlight
+                      key={index}
+                      isScrolledTo={false} // or pass appropriate value
+                      position={{
+                        boundingRect: lthwpRect,
+                        rects: [lthwpRect],
+                      }}
+                      comment={{ text: searchTerms, emoji: "" }}
+                    />
+                  );
+                });
+                
+
                 const component = isTextHighlight ? (
-                  <Highlight
-                    isScrolledTo={isScrolledTo}
-                    position={highlight.position}
-                    comment={highlight.comment}
-                  />
+                  <>
+                    <Highlight
+                      isScrolledTo={isScrolledTo}
+                      position={highlight.position}
+                      comment={highlight.comment}
+                    />
+                    {keywordHighlightComponents}
+                  </>
                 ) : (
                   <AreaHighlight
                     isScrolledTo={isScrolledTo}
