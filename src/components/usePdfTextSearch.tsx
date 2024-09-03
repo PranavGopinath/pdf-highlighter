@@ -12,19 +12,9 @@ interface TextItem {
   width: number;
 }
 
-interface PageItem {
-  text: string;
-  position: {
-    x1: number;
-    y1: number;
-    x2: number;
-    y2: number;
-  };
-}
-
 interface SearchResult {
   pageNumber: number;
-  matchedText: string;
+  matchedText: string; // This will store the individual keyword that matched
   matchIndex: number;
   position: {
     x1: number;
@@ -35,67 +25,74 @@ interface SearchResult {
 }
 
 export const usePdfTextSearch = ({ file, searchString }: UsePdfTextSearchProps): SearchResult[] => {
-  const [pages, setPages] = useState<PageItem[][]>([]);
   const [resultsList, setResultsList] = useState<SearchResult[]>([]);
 
   useEffect(() => {
-    pdfjs.getDocument(file).promise.then((docData) => {
-      const pageCount = docData._pdfInfo.numPages;
-
-      const pagePromises = Array.from({ length: pageCount }, (_, pageNumber) =>
-        docData.getPage(pageNumber + 1).then((pageData) =>
-          pageData.getTextContent().then((textContent) => {
-            return textContent.items.map((item) => {
-              if ("str" in item) {
-                const textItem = item as TextItem;
-
-                // Calculate bounding box coordinates
-                const x1 = textItem.transform[4];
-                const y1 = textItem.transform[5];
-                const x2 = x1 + textItem.width;
-                const y2 = y1 - textItem.transform[3]; // Use the transform's scale for height
-
-                return {
-                  text: textItem.str,
-                  position: { x1, y1, x2, y2 },
-                };
-              }
-              return { text: "", position: { x1: 0, y1: 0, x2: 0, y2: 0 } };
-            });
-          })
-        )
-      );
-
-      return Promise.all(pagePromises).then((pages) => {
-        setPages(pages);
-      });
-    });
-  }, [file]);
-
-  useEffect(() => {
-    if (!searchString || !searchString.length) {
+    if (!file || !searchString.trim()) {
       setResultsList([]);
       return;
     }
 
-    const regex = new RegExp(`${searchString}`, "i");
-    const updatedResults: SearchResult[] = [];
+    const fetchTextData = async () => {
+      try {
+        const docData = await pdfjs.getDocument(file).promise;
+        const pageCount = docData._pdfInfo.numPages;
+        const allPageItems = [];
 
-    pages.forEach((pageItems, pageIndex) => {
-      pageItems.forEach((item, itemIndex) => {
-        if (regex.test(item.text)) {
-          updatedResults.push({
-            pageNumber: pageIndex + 1,
-            matchedText: item.text,
-            matchIndex: itemIndex,
-            position: item.position,
-          });
+        for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+          const pageData = await docData.getPage(pageNumber);
+          const textContent = await pageData.getTextContent();
+          const pageItems = textContent.items.map((item) => {
+            if ("str" in item) {
+              const textItem = item as TextItem;
+              const x1 = textItem.transform[4];
+              const y1 = textItem.transform[5];
+              const x2 = x1 + textItem.width;
+              const y2 = y1 - textItem.transform[3];
+
+              return {
+                text: textItem.str,
+                position: { x1, y1, x2, y2 },
+              };
+            }
+            return null;
+          }).filter(item => item);
+
+          allPageItems.push(...pageItems.map(item => ({
+            ...item,
+            pageNumber: pageNumber
+          })));
         }
-      });
-    });
 
-    setResultsList(updatedResults);
-  }, [pages, searchString]);
+        const keywords = searchString.split('|').map(s => s.trim().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+        const regex = new RegExp(keywords.join('|'), 'gi');
+
+        const results = allPageItems.flatMap(item => {
+          if (!item || !item.text) return [];
+          const matches = [...item.text.matchAll(regex)];
+          return matches.map(match => {
+            if (item.position) {
+              return {
+                pageNumber: item.pageNumber,
+                matchedText: match[0], // This will be the exact keyword that matched
+                matchIndex: match.index,
+                position: item.position,
+              };
+            }
+            console.log(match[0])
+            return null;
+          });
+        }).filter(match => match !== null);
+        
+        setResultsList(results);
+      } catch (error) {
+        console.error("Failed to load PDF or process text: ", error);
+        setResultsList([]);
+      }
+    };
+
+    fetchTextData();
+  }, [file, searchString]);
 
   return resultsList;
 };

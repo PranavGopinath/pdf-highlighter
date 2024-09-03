@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import React, { useState, useEffect } from "react";
 import {
@@ -16,6 +16,7 @@ import { Spinner } from "../components/Spinner";
 import { pdfjs } from 'react-pdf';
 import "../style/App.css";
 import { usePdfTextSearch } from "../components/usePdfTextSearch";
+import debounce from 'lodash/debounce';
 
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
@@ -34,20 +35,20 @@ type BoundingRect = {
   y2: number;
   width: number;
   height: number;
+  pageNumber: number,
 };
 
 const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
-const SECONDARY_PDF_URL = "https://www.homeworkforyou.com/static_media/uploadedfiles/TECH%20105%20complete%20book-7.pdf";
 
-const searchParams = new URLSearchParams(document.location.search);
+const searchParams = new URLSearchParams(window.location.search);
 const initialUrl = searchParams.get("url") || PRIMARY_PDF_URL;
 
 const getNextId = () => String(Math.random()).slice(2);
 
-const parseIdFromHash = () => document.location.hash.slice("#highlight-".length);
+const parseIdFromHash = () => window.location.hash.slice("#highlight-".length);
 
 const resetHash = () => {
-  document.location.hash = "";
+  window.location.hash = "";
 };
 
 const HighlightPopup = ({
@@ -103,11 +104,6 @@ const Page = () => {
     setHighlights([]);
   };
 
-  const toggleDocument = () => {
-    const newUrl = url === PRIMARY_PDF_URL ? SECONDARY_PDF_URL : PRIMARY_PDF_URL;
-    setUrl(newUrl);
-    setHighlights([]);
-  };
 
   const scrollToHighlightFromHash = () => {
     const highlight = getHighlightById(parseIdFromHash());
@@ -149,24 +145,16 @@ const Page = () => {
     setSearchTerms(terms);
   };
 
-  const convertBoundingRectToLTWHP = (rect: BoundingRect): LTWHP => {
-    return {
-      top: rect.y1,
-      left: rect.x1,
-      width: rect.width,
-      height: rect.height,
-      // Add the page number if it's required for `LTWHP`
-    };
-  };
-  
 
-  const highlightTermsInPdf = () => {
+
+  const debouncedHighlightTermsInPdf = debounce(() => {
     const newHighlights: IHighlight[] = [];
-    const newRects: BoundingRect[] = []; // Array to track bounding rectangles
+    const newRects: BoundingRect[] = [];
   
     searchResults.forEach((searchResult) => {
       const { position, pageNumber, matchedText } = searchResult;
   
+      // Create bounding rectangle
       const boundingRect: BoundingRect = {
         x1: position.x1,
         y1: position.y1,
@@ -174,9 +162,10 @@ const Page = () => {
         y2: position.y2,
         width: position.x2 - position.x1,
         height: position.y1 - position.y2,
+        pageNumber: pageNumber,
       };
   
-      newRects.push(boundingRect); // Add bounding rect to array
+      newRects.push(boundingRect);
   
       newHighlights.push({
         id: getNextId(),
@@ -191,12 +180,29 @@ const Page = () => {
     });
   
     setHighlights(newHighlights);
-    updateKeywordRects(newRects); // Update state with new bounding rectangles
+    updateKeywordRects(newRects);
+  }, 500);
+
+  const convertBoundingRectToLTWHP = (rect: BoundingRect): LTWHP => {
+    return {
+      top: 750 - rect.y1,
+      left: rect.x1,
+      width: rect.width,
+      height: rect.height,
+      pageNumber: rect.pageNumber
+    };
   };
+
+  const resetSearchResults = () => {
+    // This could reset the search term and clear current search results visually
+    setSearchTerms("");
+    // Additional functionality might be needed depending on how search results are managed
+  };
+  
 
   useEffect(() => {
     if (searchResults.length > 0) {
-      highlightTermsInPdf();
+      debouncedHighlightTermsInPdf();
     }
   }, [searchResults]);
 
@@ -209,21 +215,14 @@ const Page = () => {
     resultText = "No results found";
   }
 
-
-  console.log(searchResults)
+  console.log(searchResults);
   return (
-    <div className="App" style={{ display: "flex", height: "100vh" }}>
+    <div className="App" style={{ display: "flex", height:"100vh", width: "full"}}>
       <Sidebar
-        highlights={highlights}
-        resetHighlights={resetHighlights}
-        toggleDocument={toggleDocument}
+        searchResults={searchResults}
+        resetSearchResults={resetSearchResults}
       />
-      <div
-        style={{
-          height: "100vh",
-          width: "75vw",
-          position: "relative",
-        }}
+      <div className = "h-4/5 w-1/2 relative justify-center left-20"
       >
         <PDFUpload setFile={handleSetFile} />
         <SearchBox onSearch={handleSearch} />
@@ -261,10 +260,13 @@ const Page = () => {
                 screenshot,
                 isScrolledTo
               ) => {
-                const isTextHighlight = !highlight.content?.image;
 
-                const keywordHighlightComponents = keywordRects.map((rect, index) => {
+                const keywordHighlightComponents = keywordRects
+                .map((rect, index) => {
                   const lthwpRect = convertBoundingRectToLTWHP(rect);
+                  console.log("BoundingRect:", rect);
+                  console.log("Converted LTWHP:", lthwpRect);
+
                 
                   return (
                     <Highlight
@@ -279,29 +281,14 @@ const Page = () => {
                   );
                 });
                 
+                
 
-                const component = isTextHighlight ? (
+                const component = (
                   <>
-                    <Highlight
-                      isScrolledTo={isScrolledTo}
-                      position={highlight.position}
-                      comment={highlight.comment}
-                    />
                     {keywordHighlightComponents}
                   </>
-                ) : (
-                  <AreaHighlight
-                    isScrolledTo={isScrolledTo}
-                    highlight={highlight}
-                    onChange={(boundingRect) => {
-                      updateHighlight(
-                        highlight.id,
-                        { boundingRect: viewportToScaled(boundingRect) },
-                        { image: screenshot(boundingRect) }
-                      );
-                    }}
-                  />
                 );
+                
 
                 return (
                   <Popup
