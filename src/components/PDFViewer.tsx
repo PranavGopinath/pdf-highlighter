@@ -8,7 +8,6 @@ import { Button } from "@/components/Button"
 import { Input } from "@/components/Input"
 import { ChevronLeft, ChevronRight, ZoomIn, ZoomOut } from 'lucide-react'
 
-// Set up the worker for react-pdf
 pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
 
 interface PDFViewerProps {

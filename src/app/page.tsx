@@ -28,6 +28,7 @@ import type {
   LTWHP,
 } from "react-pdf-highlighter";
 
+//The bounding rect type contains all the positional information required for creating individual highlights
 type BoundingRect = {
   x1: number;
   y1: number;
@@ -38,6 +39,7 @@ type BoundingRect = {
   pageNumber: number,
 };
 
+// code from react-pdf-highlighter example. initial url is set for purposes of rendering the pdf loader component
 const PRIMARY_PDF_URL = "https://arxiv.org/pdf/1708.08021";
 
 const searchParams = new URLSearchParams(window.location.search);
@@ -71,11 +73,28 @@ const Page = () => {
   const [searchTerms, setSearchTerms] = useState<string>("");
   const [keywordRects, setKeywordRects] = useState<BoundingRect[]>([]);
 
+
+  //The keywordrects is an array of states, of type boundingRectangle. 
+  //This contains the positional information for each highlight
   const updateKeywordRects = (newRects: BoundingRect[]) => {
     setKeywordRects(newRects);
   };
 
   const searchResults = usePdfTextSearch({ file: url, searchString: searchTerms });
+
+  const handleSetFile = (file: File | null) => {
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setFileUrl(url);
+      setUrl(url); 
+    } else {
+      setFileUrl(null);
+      setUrl(initialUrl); 
+    }
+  };
+
+
+  // old code from react-pdf-highlighter which is used within the pdfhighlighter component
 
   useEffect(() => {
     const handleHashChange = () => {
@@ -88,46 +107,25 @@ const Page = () => {
       window.removeEventListener("hashchange", handleHashChange);
     };
   }, [highlights]);
-
-  const handleSetFile = (file: File | null) => {
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setFileUrl(url);
-      setUrl(url); // Set the URL for the PDF viewer
-    } else {
-      setFileUrl(null);
-      setUrl(initialUrl); // Reset to initial URL if no file is selected
-    }
-  };
-
-  const resetHighlights = () => {
-    setHighlights([]);
-  };
-
-
   const scrollToHighlightFromHash = () => {
     const highlight = getHighlightById(parseIdFromHash());
     if (highlight) {
       scrollViewerTo(highlight);
     }
   };
-
   const getHighlightById = (id: string) => {
     return highlights.find((highlight) => highlight.id === id);
   };
-
   const addHighlight = (highlight: NewHighlight) => {
     console.log("Saving highlight", highlight);
     setHighlights([{ ...highlight, id: getNextId() }, ...highlights]);
   };
-
   const updateHighlight = (
     highlightId: string,
     position: Partial<ScaledPosition>,
     content: Partial<Content>
   ) => {
     console.log("Updating highlight", highlightId, position, content);
-
     setHighlights(
       highlights.map((h) =>
         h.id === highlightId
@@ -141,12 +139,12 @@ const Page = () => {
     );
   };
 
+//handles search from search box component
   const handleSearch = (terms: string) => {
     setSearchTerms(terms);
   };
 
-
-
+//takes in positional information from the search results, and sets them to boundingRects. 
   const debouncedHighlightTermsInPdf = debounce(() => {
     const newHighlights: IHighlight[] = [];
     const newRects: BoundingRect[] = [];
@@ -154,7 +152,6 @@ const Page = () => {
     searchResults.forEach((searchResult) => {
       const { position, pageNumber, matchedText } = searchResult;
   
-      // Create bounding rectangle
       const boundingRect: BoundingRect = {
         x1: position.x1,
         y1: position.y1,
@@ -183,6 +180,9 @@ const Page = () => {
     updateKeywordRects(newRects);
   }, 500);
 
+  //converts each bounding rect to LTWHP type (left, top, width, height, pagenumber)
+  //This is a custom type used in the react-pdf-highlighter library, specifically for the highlight component used later
+  //The highlighter component must take in positional information of type LTWHP, hence the conversion is performed. 
   const convertBoundingRectToLTWHP = (rect: BoundingRect): LTWHP => {
     return {
       top: 750 - rect.y1,
@@ -194,9 +194,7 @@ const Page = () => {
   };
 
   const resetSearchResults = () => {
-    // This could reset the search term and clear current search results visually
     setSearchTerms("");
-    // Additional functionality might be needed depending on how search results are managed
   };
   
 
@@ -208,14 +206,19 @@ const Page = () => {
 
   let resultText =
     searchResults.length === 1
-      ? "Results found on 1 page"
-      : `Results found on ${searchResults.length} pages`;
+      ? "1 result found"
+      : `${searchResults.length} results found`;
 
   if (searchResults.length === 0) {
     resultText = "No results found";
   }
-
   console.log(searchResults);
+
+
+  //This returns the content for page, including: sidebar, pdf upload button, search box, pdf loader component
+  //Within pdf loader component, the "keywordRects" array is mapped over, to return a highlight component for each keyword
+  //The pdf highlighter component seems to be required in order for the pdf loader to function correctly, 
+  //which is why some code from react-pdf-highlighter's example is still present. 
   return (
     <div className="App" style={{ display: "flex", height:"100vh", width: "full"}}>
       <Sidebar
@@ -231,7 +234,7 @@ const Page = () => {
           {(pdfDocument) => (
             <PdfHighlighter
               pdfDocument={pdfDocument}
-              enableAreaSelection={(event) => event.altKey} // Disable area selection
+              enableAreaSelection={(event) => false} 
               onScrollChange={resetHash}
               scrollRef={(scrollTo) => {
                 scrollViewerTo = scrollTo;
@@ -271,7 +274,7 @@ const Page = () => {
                   return (
                     <Highlight
                       key={index}
-                      isScrolledTo={false} // or pass appropriate value
+                      isScrolledTo={false} 
                       position={{
                         boundingRect: lthwpRect,
                         rects: [lthwpRect],
@@ -281,15 +284,12 @@ const Page = () => {
                   );
                 });
                 
-                
-
                 const component = (
                   <>
                     {keywordHighlightComponents}
                   </>
                 );
                 
-
                 return (
                   <Popup
                     popupContent={<HighlightPopup {...highlight} />}

@@ -8,13 +8,13 @@ interface UsePdfTextSearchProps {
 
 interface TextItem {
   str: string;
-  transform: number[]; // Contains position and scaling information
+  transform: number[]; 
   width: number;
 }
 
 interface SearchResult {
   pageNumber: number;
-  matchedText: string; // This will store the individual keyword that matched
+  matchedText: string; 
   matchIndex: number;
   position: {
     x1: number;
@@ -26,6 +26,7 @@ interface SearchResult {
 
 export const usePdfTextSearch = ({ file, searchString }: UsePdfTextSearchProps): SearchResult[] => {
   const [resultsList, setResultsList] = useState<SearchResult[]>([]);
+
 
   useEffect(() => {
     if (!file || !searchString.trim()) {
@@ -74,7 +75,7 @@ export const usePdfTextSearch = ({ file, searchString }: UsePdfTextSearchProps):
             if (item.position) {
               return {
                 pageNumber: item.pageNumber,
-                matchedText: match[0], // This will be the exact keyword that matched
+                matchedText: match[0],
                 matchIndex: match.index,
                 position: item.position,
               };

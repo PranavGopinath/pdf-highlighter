@@ -29,7 +29,6 @@ const SearchBox: React.FC<SearchBoxProps> = ({ onSearch }) => {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault()
-    // Implement your search logic here
     console.log('Searching for:', searchQuery)
   }
 
