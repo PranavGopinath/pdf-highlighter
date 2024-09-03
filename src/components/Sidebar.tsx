@@ -25,7 +25,6 @@ export function Sidebar({
         <div className = "flex flex-col">
         <div className="description" style={{ padding: "1rem" }}>
         <h2>Search Results</h2>
-        <p>Click on a result to highlight it in the document.</p>
       </div>
       {searchResults.length > 0 && (
         <div style={{ padding: "1rem" }}>

@@ -16,7 +16,6 @@ import { Spinner } from "../components/Spinner";
 import { pdfjs } from 'react-pdf';
 import "../style/App.css";
 import { usePdfTextSearch } from "../components/usePdfTextSearch";
-import debounce from 'lodash/debounce';
 
 pdfjs.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
 
@@ -145,7 +144,7 @@ const Page = () => {
   };
 
 //takes in positional information from the search results, and sets them to boundingRects. 
-  const debouncedHighlightTermsInPdf = debounce(() => {
+  const debouncedHighlightTermsInPdf = () => {
     const newHighlights: IHighlight[] = [];
     const newRects: BoundingRect[] = [];
   
@@ -178,7 +177,7 @@ const Page = () => {
   
     setHighlights(newHighlights);
     updateKeywordRects(newRects);
-  }, 500);
+  };
 
   //converts each bounding rect to LTWHP type (left, top, width, height, pagenumber)
   //This is a custom type used in the react-pdf-highlighter library, specifically for the highlight component used later
