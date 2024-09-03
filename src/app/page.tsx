@@ -184,7 +184,7 @@ const Page = () => {
   //The highlighter component must take in positional information of type LTWHP, hence the conversion is performed. 
   const convertBoundingRectToLTWHP = (rect: BoundingRect): LTWHP => {
     return {
-      top: 750 - rect.y1,
+      top: 805 - rect.y1,
       left: rect.x1,
       width: rect.width,
       height: rect.height,
@@ -224,7 +224,7 @@ const Page = () => {
         searchResults={searchResults}
         resetSearchResults={resetSearchResults}
       />
-      <div className = "h-4/5 w-1/2 relative justify-center left-20"
+      <div className = "h-4/5 w-1/2 relative justify-center left-32"
       >
         <PDFUpload setFile={handleSetFile} />
         <SearchBox onSearch={handleSearch} />
